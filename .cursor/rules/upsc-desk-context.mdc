@@ -1,0 +1,91 @@
+---
+description: UPSC Desk project context imported from prior build chat — vision, phases, decisions, and conventions
+alwaysApply: true
+---
+
+# UPSC Desk — Project Context
+
+**Standalone repo:** `/Users/harshpratap/sites/upsc-desk` — NOT part of `dronacharya-fe` or any other project.
+
+**Prior chat:** [UPSC Desk build](1ae4975e-47bb-43a3-86cf-2ab1cd17df67) (originally in dronacharya-fe workspace, moved to standalone repo Aug 19 2026)
+
+## What this is
+
+Personal UPSC CSE dashboard — private aggregator for Prelims + Mains across GS-1…GS-4. Aggregates current affairs from whitelisted gov.in, RBI, UN, environment, judiciary, and international sources. Links out to originals; does not republish content.
+
+Reference UX inspiration: [UnderStand UPSC](https://www.understandupsc.com/) — pill tabs, daily archive, GS navigation — but this app is source-driven (live feeds), not coaching notes.
+
+## Build phases
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 1–8 | Done | Next.js 14 + Tailwind, responsive shell, 15 sources, mock articles, all pages, localStorage bookmarks |
+| 9 | **Next** | Wire live RSS into Today page (DTE, UN; PIB RSS exists but often empty) |
+| 10 | Pending | Password auth + PWA for iPad home screen |
+
+## Routes (all verified 200)
+
+- `/` Today · `/prelims` · `/mains` · `/gs-1`…`/gs-4` (rewrite → `/gs/:paper`)
+- `/sources` · `/sources/[slug]` · `/daily` · `/daily/[y]/[m]/[d]` · `/saved`
+- `/api/feeds/[sourceId]` — live RSS JSON preview
+
+## Responsive layout
+
+- **Mobile:** bottom tabs (Today, Sources, GS, Saved)
+- **iPad/Desktop:** top pill nav + left sidebar
+- **Touch:** 44px tap targets; dark mode via `prefers-color-scheme`
+
+## Key source URL fixes (do not revert)
+
+| Source | Use | Avoid |
+|--------|-----|-------|
+| Supreme Court | `https://www.sci.gov.in/press-release/` | `main.sci.gov.in` (dead) |
+| ISRO | `https://www.isro.gov.in` | bare `isro.gov.in` |
+| BRICS | MEA press releases URL | `brics2026.gov.in` (403) |
+| PIB | `https://www.pib.gov.in` | generic homepage-only links |
+
+**No open REST APIs** for Indian gov sources — only websites and occasional RSS. [public-apis](https://github.com/public-apis/public-apis) does not cover `.gov.in` UPSC sources.
+
+**Working RSS:** DTE `stories.rss`, UN news RSS. PIB RSS endpoint exists but often returns empty items.
+
+## Article card UX (implemented)
+
+- Tap title → expand with 500ms animation
+- Show 10 lines, then "Read more" (+10 lines per click)
+- "Open original ↗" always visible with verified permalink
+- Articles have `content[]` paragraphs for in-app reading
+
+## Project structure
+
+```
+src/
+├── app/           pages + /api/feeds/[sourceId]
+├── components/    ArticleCard, SourceCard, layout nav, feeds
+├── data/          sources.ts (15 sources), articles.ts (mock + helpers)
+├── context/       SavedProvider (localStorage key: upsc-desk-saved)
+├── lib/           feeds.ts (rss-parser), content.ts (line chunks), utils.ts
+└── types/         Article, Source, GSPaper, Lens, SourceGroup
+```
+
+## Conventions
+
+- **Always verify URLs with `curl` before adding** — run `bash scripts/verify-links.sh` after changing `articles.ts` or `sources.ts`
+- GS routes: folder `src/app/gs/[paper]/page.tsx` + rewrite in `next.config.mjs`
+- Source registry in `src/data/sources.ts` — add `rssFeedUrl` and `feedNote` when known
+- Keep scope minimal; match existing Tailwind CSS variable theming in `globals.css`
+- Single-user private app — no public signup, no coaching-site patterns
+
+## User preferences (from prior chat)
+
+- Both Prelims and Mains lenses
+- iPad / mobile / desktop friendly
+- Expandable in-app reading before opening original
+- All article links must be verified working — audit with curl before adding
+- Separate standalone repo only
+
+## Next step when user says "continue Phase 9"
+
+1. Fetch DTE + UN RSS on schedule (or on-demand with cache)
+2. Merge live items into Today feed alongside or replacing mock data
+3. Auto-tag GS paper / Prelims-Mains lens (rules-based initially)
+4. Optional: SQLite or JSON file cache for fetched articles
