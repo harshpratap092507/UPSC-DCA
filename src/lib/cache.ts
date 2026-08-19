@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { promises as fs } from "fs";
+import os from "os";
 import path from "path";
 import { Article } from "@/types";
 
@@ -10,8 +11,16 @@ export interface FeedCache {
   liveSourceIds: string[];
 }
 
-const CACHE_DIR = path.join(process.cwd(), ".cache");
-const CACHE_FILE = path.join(CACHE_DIR, "feed-cache.json");
+/** In-memory cache — survives within a warm serverless instance */
+let memoryCache: FeedCache | null = null;
+
+function cacheFilePath(): string {
+  // Vercel/serverless: only /tmp is writable
+  if (process.env.VERCEL) {
+    return path.join(os.tmpdir(), "upsc-desk-feed-cache.json");
+  }
+  return path.join(process.cwd(), ".cache", "feed-cache.json");
+}
 
 /** Default TTL — refresh RSS feeds if cache is older than this */
 export const CACHE_TTL_MS = 30 * 60 * 1000;
@@ -21,17 +30,27 @@ export function articleIdFromUrl(url: string): string {
 }
 
 export async function readCache(): Promise<FeedCache | null> {
+  if (memoryCache) return memoryCache;
+
   try {
-    const raw = await fs.readFile(CACHE_FILE, "utf-8");
-    return JSON.parse(raw) as FeedCache;
+    const raw = await fs.readFile(cacheFilePath(), "utf-8");
+    memoryCache = JSON.parse(raw) as FeedCache;
+    return memoryCache;
   } catch {
     return null;
   }
 }
 
 export async function writeCache(cache: FeedCache): Promise<void> {
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(CACHE_FILE, JSON.stringify(cache, null, 2), "utf-8");
+  memoryCache = cache;
+
+  try {
+    const file = cacheFilePath();
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, JSON.stringify(cache, null, 2), "utf-8");
+  } catch {
+    // Expected on read-only filesystems — in-memory cache still works
+  }
 }
 
 export function isCacheStale(cache: FeedCache | null): boolean {
@@ -39,3 +58,10 @@ export function isCacheStale(cache: FeedCache | null): boolean {
   const age = Date.now() - new Date(cache.lastRefreshedAt).getTime();
   return age > CACHE_TTL_MS;
 }
+
+export const emptyCache = (): FeedCache => ({
+  lastRefreshedAt: "",
+  articles: [],
+  sourceErrors: {},
+  liveSourceIds: [],
+});

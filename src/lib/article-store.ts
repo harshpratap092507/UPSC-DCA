@@ -1,6 +1,7 @@
 import { mockArticles, GS_LABELS, GS_SUBTOPICS } from "@/data/articles";
 import { Article, DayArchive, GSPaper, Lens } from "@/types";
 import {
+  emptyCache,
   FeedCache,
   isCacheStale,
   readCache,
@@ -11,17 +12,31 @@ export { GS_LABELS, GS_SUBTOPICS };
 
 let refreshPromise: Promise<FeedCache> | null = null;
 
+const isVercel = Boolean(process.env.VERCEL);
+
 /** Ensure RSS cache is fresh; returns cached or freshly fetched data */
 export async function ensureLiveArticles(): Promise<FeedCache> {
-  const existing = await readCache();
-  if (existing && !isCacheStale(existing)) return existing;
+  try {
+    const existing = await readCache();
+    if (existing && !isCacheStale(existing)) return existing;
 
-  if (!refreshPromise) {
-    refreshPromise = refreshLiveFeeds().finally(() => {
-      refreshPromise = null;
-    });
+    // Vercel: never block page render with a 32-source fetch (10s timeout).
+    // Serve stale cache or fall back to mock; refresh via /api/feeds/refresh or cron.
+    if (isVercel) {
+      if (existing?.articles.length) return existing;
+      return emptyCache();
+    }
+
+    if (!refreshPromise) {
+      refreshPromise = refreshLiveFeeds().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    return await refreshPromise;
+  } catch {
+    const fallback = await readCache();
+    return fallback ?? emptyCache();
   }
-  return refreshPromise;
 }
 
 /** Force refresh (for API / manual trigger) */

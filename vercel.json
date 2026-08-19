@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "src/app/api/feeds/refresh/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/feeds/[sourceId]/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/feeds/refresh",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
